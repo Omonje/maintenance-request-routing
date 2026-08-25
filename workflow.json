@@ -1,0 +1,294 @@
+{
+  "name": "Maintenance Request Routing",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "triggerField": "createdTime",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appUmO42tNLIDACBt"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblxIPCJJPByFGs3c"
+        },
+        "options": {}
+      },
+      "id": "80000000-3333-4444-8555-800000000001",
+      "name": "Airtable Trigger: New Request",
+      "type": "n8n-nodes-base.airtableTrigger",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        -224
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "REPLACE_WITH_YOUR_AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"gpt-4o-mini\",\n  response_format: { type: \"json_object\" },\n  messages: [\n    {\n      role: \"system\",\n      content: \"You are a property maintenance request classifier. Given a tenant's issue description, respond with JSON only, no other text: {\\\"category\\\": \\\"Plumbing\\\" or \\\"Electrical\\\" or \\\"General\\\", \\\"urgency\\\": \\\"Emergency\\\" or \\\"Routine\\\"}. Emergency means flooding, no heat, no water, gas smell, fire risk, or an active electrical hazard. Everything else is Routine.\"\n    },\n    {\n      role: \"user\",\n      content: $json.fields.Description || \"\"\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "80000000-3333-4444-8555-800000000002",
+      "name": "HTTP Request: Classify with OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -432,
+        -224
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_OPENAI_HEADER_CREDENTIAL_ID",
+          "name": "OpenAI API Key (Header Auth)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let parsed;\ntry {\n  parsed = JSON.parse($json.choices[0].message.content);\n} catch (e) {\n  parsed = { category: 'General', urgency: 'Routine' };\n}\n\nreturn {\n  category: parsed.category || 'General',\n  urgency: parsed.urgency || 'Routine'\n};"
+      },
+      "id": "80000000-3333-4444-8555-800000000003",
+      "name": "Code: Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appUmO42tNLIDACBt"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblwoJmqBodn9yv1Z"
+        },
+        "filterByFormula": "=AND({Category} = '{{ $json.category }}', {Available} = TRUE())",
+        "options": {}
+      },
+      "id": "80000000-3333-4444-8555-800000000004",
+      "name": "Airtable: Find Available Contractor",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        -224
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "REPLACE_WITH_YOUR_AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appUmO42tNLIDACBt"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblxIPCJJPByFGs3c"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Airtable Trigger: New Request').item.json.id }}",
+            "Category": "={{ $('Code: Parse Classification').item.json.category }}",
+            "Urgency": "={{ $('Code: Parse Classification').item.json.urgency }}",
+            "Assigned Contractor": "={{ $json.fields.Name }} ({{ $json.fields.Email }})",
+            "Status": "Assigned",
+            "Assigned At": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "80000000-3333-4444-8555-800000000005",
+      "name": "Airtable: Update Request",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        -224
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "REPLACE_WITH_YOUR_AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "requests@property-ops-demo.com",
+        "toEmail": "={{ $('Airtable Trigger: New Request').item.json.fields['Requester Contact'] }}",
+        "subject": "We received your maintenance request",
+        "html": "=<p>Hi {{ $('Airtable Trigger: New Request').item.json.fields['Requester Name'] }},</p><p>We've received your maintenance request for <strong>{{ $('Airtable Trigger: New Request').item.json.fields['Property/Unit'] }}</strong> and assigned it to {{ $('Airtable: Find Available Contractor').item.json.fields.Name }}, who will be in touch shortly.</p><p>Issue reported: {{ $('Airtable Trigger: New Request').item.json.fields.Description }}</p>",
+        "options": {}
+      },
+      "id": "80000000-3333-4444-8555-800000000006",
+      "name": "Email: Notify Requester",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        464,
+        -336
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "vrAdgbLZVjOamlpN",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "requests@property-ops-demo.com",
+        "toEmail": "={{ $('Airtable: Find Available Contractor').item.json.fields.Email }}",
+        "subject": "=New {{ $('Code: Parse Classification').item.json.urgency }} maintenance job assigned",
+        "html": "=<p>Hi {{ $('Airtable: Find Available Contractor').item.json.fields.Name }},</p><p>A new <strong>{{ $('Code: Parse Classification').item.json.category }}</strong> job has been assigned to you, marked <strong>{{ $('Code: Parse Classification').item.json.urgency }}</strong>.</p><p>Property/Unit: {{ $('Airtable Trigger: New Request').item.json.fields['Property/Unit'] }}<br>Issue: {{ $('Airtable Trigger: New Request').item.json.fields.Description }}<br>Tenant contact: {{ $('Airtable Trigger: New Request').item.json.fields['Requester Contact'] }}</p>",
+        "options": {}
+      },
+      "id": "80000000-3333-4444-8555-800000000007",
+      "name": "Email: Notify Contractor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        464,
+        -112
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "vrAdgbLZVjOamlpN",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## AI Classification: Direct API Call, Not a Convenience Node\nDeliberately uses HTTP Request against OpenAI's Chat Completions endpoint directly, not n8n's built-in OpenAI node. This is the point, not a workaround - it proves the ability to work with an LLM API directly (request/response shape, auth headers, JSON parsing) rather than only through a pre-built wrapper. `response_format: json_object` forces a parseable response; the Code node still wraps parsing in try/catch and falls back to General/Routine if the model ever returns something unparseable, so a bad AI response degrades safely instead of breaking the workflow.\n\n**Why keyword classification was dropped in favor of this:** the user explicitly wants this project to prove AI-API skill for the portfolio - this is the one project in the sprint built specifically to demonstrate that, not to be the fastest possible build.",
+        "height": 340,
+        "width": 900,
+        "color": 4
+      },
+      "id": "80000000-3333-4444-8555-80000000000a",
+      "name": "Note: AI Classification Choice",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Intake\nAirtable Form (view on Maintenance Requests) writes new records directly into the base - no separate sync step, since Airtable owns the form natively. The trigger polls for new records; Category/Urgency/Assigned Contractor/Status stay blank until this workflow fills them in, which is also what makes 'is this row already processed' unambiguous - a blank Status means not yet handled.",
+        "height": 200,
+        "width": 600,
+        "color": 6
+      },
+      "id": "80000000-3333-4444-8555-80000000000b",
+      "name": "Note: Intake",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -680
+      ]
+    }
+  ],
+  "connections": {
+    "Airtable Trigger: New Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Classify with OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Classify with OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Airtable: Find Available Contractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable: Find Available Contractor": {
+      "main": [
+        [
+          {
+            "node": "Airtable: Update Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable: Update Request": {
+      "main": [
+        [
+          {
+            "node": "Email: Notify Requester",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email: Notify Contractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
