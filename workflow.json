@@ -56,7 +56,11 @@
           "id": "REPLACE_WITH_YOUR_OPENAI_HEADER_CREDENTIAL_ID",
           "name": "OpenAI API Key (Header Auth)"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -102,7 +106,10 @@
           "id": "REPLACE_WITH_YOUR_AIRTABLE_CREDENTIAL_ID",
           "name": "Airtable account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -144,7 +151,10 @@
           "id": "REPLACE_WITH_YOUR_AIRTABLE_CREDENTIAL_ID",
           "name": "Airtable account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -167,7 +177,10 @@
           "id": "vrAdgbLZVjOamlpN",
           "name": "SMTP account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -190,7 +203,10 @@
           "id": "vrAdgbLZVjOamlpN",
           "name": "SMTP account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -222,6 +238,21 @@
       "position": [
         -704,
         -680
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Error Handling\nHTTP Request: Classify with OpenAI now has onError: continueRegularOutput\nplus retry (3x/3s) - previously it had neither, so a single OpenAI blip\nwould kill the whole request before it ever reached Code: Parse\nClassification's existing try/catch fallback (which defaults to\nGeneral/Routine but could never actually run). Every other node here\nretries 3x/3s. Airtable: Find Available Contractor still stops the\nworkflow on failure - a graceful \"no contractor found, notify requester\nonly\" path needs an IF branch added, not just a retry, so that gap is\nleft open rather than silently changed. Points Settings -> Error Workflow\nat the shared handler for anything else.",
+        "height": 280,
+        "width": 440
+      },
+      "id": "retry-note-04",
+      "name": "Note: Error Handling",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
       ]
     }
   ],
@@ -290,5 +321,8 @@
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true
+  },
+  "settings": {
+    "errorWorkflow": "REPLACE_WITH_SHARED_ERROR_HANDLER_WORKFLOW_ID"
   }
 }
